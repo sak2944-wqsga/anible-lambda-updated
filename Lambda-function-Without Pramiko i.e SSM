@@ -1,0 +1,40 @@
+import boto3
+import time
+
+def lambda_handler(event, context):
+    ec2_instance_id = "i-047ff0b33d4346e87"  # <-- change to your instance ID
+
+    ssm = boto3.client('ssm')
+
+    # Step 1: Send command
+    response = ssm.send_command(
+        InstanceIds=[ec2_instance_id],
+        DocumentName="AWS-RunShellScript",
+        Parameters={
+            'commands': [
+                'cd /home/ec2-user',
+                'ansible-playbook playbook.yml'
+            ]
+        },
+        TimeoutSeconds=600
+    )
+
+    command_id = response['Command']['CommandId']
+
+    # Step 2: Poll status until complete
+    while True:
+        output = ssm.get_command_invocation(
+            CommandId=command_id,
+            InstanceId=ec2_instance_id
+        )
+
+        if output['Status'] in ['Success', 'Failed', 'Cancelled', 'TimedOut']:
+            break
+
+        time.sleep(2)
+
+    return {
+        "status": output['Status'],
+        "stdout": output.get('StandardOutputContent', ''),
+        "stderr": output.get('StandardErrorContent', '')
+    }
